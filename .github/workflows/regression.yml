@@ -8,7 +8,7 @@ on:
     inputs:
       testPlanKey:
         description: 'ID del Test Plan (ej. SB-10)'
-        required: false # Cambiado a false para que el push automático no falle
+        required: false
         type: string
       projectKey:
         description: 'ID del Proyecto (ej. SB)'
@@ -24,13 +24,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4.1.1
 
-      # --- PASO DE VALIDACIÓN ---
-      - name: 🔍 Debug Xray Variables
+      # --- PASO DE VALIDACIÓN MEJORADO ---
+      - name: 🔍 Debug Xray Context
         run: |
-          echo "El ID de Project es: ${{ secrets.PROJECTKEY }}"
-          echo "El ID de Test Plan es: ${{ secrets.TESTPLANKEY }}"
-          echo "El Project Key es: SB"
-      # ---------------------------
+          echo "Evento disparado por: ${{ github.event_name }}"
+          echo "--- Valores desde Payload (Web) ---"
+          echo "Project (Payload): ${{ github.event.client_payload.projectKey }}"
+          echo "Test Plan (Payload): ${{ github.event.client_payload.testPlanKey }}"
+          echo "--- Valores desde Inputs (Manual) ---"
+          echo "Project (Input): ${{ github.event.inputs.projectKey }}"
+          echo "--- Verificación de Secrets ---"
+          if [ -z "${{ secrets.XRAY_CLIENT_ID }}" ]; then echo "❌ XRAY_CLIENT_ID no está configurado"; else echo "✅ XRAY_CLIENT_ID detectado"; fi
+          if [ -z "${{ secrets.PROJECTKEY }}" ]; then echo "⚠️ Secret PROJECTKEY no encontrado, usaré SB por defecto"; fi
 
       - name: Install dependencies
         run: npm i
@@ -39,16 +44,17 @@ jobs:
         run: |
           curl -L https://github.com/cucumber/json-formatter/releases/download/v19.0.0/cucumber-json-formatter-linux-amd64 -o cucumber-json-formatter
           chmod +x cucumber-json-formatter
+
       - name: Cypress.io
         continue-on-error: true
         uses: cypress-io/github-action@v6.5.0
         with:
           command: npm run cypress:execution-tags
           browser: chrome
-          record: true
+          # record: true # Solo actívalo si tienes configurado Cypress Cloud
         env:
           CUCUMBER_JSON_FORMATTER: ./cucumber-json-formatter
-          
+                
       - name: Import Results to Xray
         if: always()
         uses: mikepenz/xray-action@v3
@@ -58,12 +64,11 @@ jobs:
           xrayCloud: "true"
           testFormat: 'cucumber'
           testPaths: 'cypress/reports/cucumber-results.json'
-          # Forzamos a que NO cree nada nuevo si falla el mapeo
           failOnImportError: true
-          # IMPORTANTE: Xray Cloud a veces requiere este parámetro para identificar el ambiente
-          testPlanKey: "${{ github.event.inputs.testPlanKey || secrets.TESTPLANKEY }}"
-          projectKey: "${{ github.event.inputs.projectKey || secrets.PROJECTKEY }}"
-          
+          # PRIORIDAD DE VALORES: 1. Webhook Payload -> 2. Manual Input -> 3. Secrets -> 4. Hardcoded
+          projectKey: "${{ github.event.client_payload.projectKey || github.event.inputs.projectKey || secrets.PROJECTKEY || 'SB' }}"
+          testPlanKey: "${{ github.event.client_payload.testPlanKey || github.event.inputs.testPlanKey || secrets.TESTPLANKEY }}"
+                
       - name: Upload Cypress Videos
         if: always()
         uses: actions/upload-artifact@v4
