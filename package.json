@@ -4,8 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "cypress open"
-  },
+  "cy:run:regression": "cypress run --browser chrome --headless"
+},
   "keywords": [
     "cypress"
   ],
@@ -15,10 +15,17 @@
     "@badeball/cypress-cucumber-preprocessor": "^14.0.0",
     "@bahmutov/cypress-esbuild-preprocessor": "^2.1.5",
     "cypress": "^11.2.0",
-    "esbuild": "^0.15.18"
+    "esbuild": "^0.27.3"
   },
-  
   "cypress-cucumber-preprocessor": {
+    "json": {
+      "enabled": true,
+      "output": "cypress/reports/cucumber-results.json",
+      "formatter": "./cucumber-json-formatter"
+    },
+    "messages": {
+      "enabled": false
+    },
     "stepDefinitions": [
       "cypress/e2e/steps-definitions/*.{js, ts}"
     ]

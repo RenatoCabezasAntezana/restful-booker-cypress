@@ -1,0 +1,71 @@
+name: Cypress Apis Regression Tests
+
+on:
+  push:
+    branches:
+      - '**'
+  workflow_dispatch:
+    inputs:
+      testPlanKey:
+        description: 'ID del Test Plan (ej. SB-10)'
+        required: false # Cambiado a false para que el push automático no falle
+        type: string
+      projectKey:
+        description: 'ID del Proyecto (ej. SB)'
+        required: false
+        type: string
+  repository_dispatch:
+    types: [run-cypress-tests]
+
+jobs:
+  cypress-run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4.1.1
+
+      # --- PASO DE VALIDACIÓN ---
+      - name: 🔍 Debug Xray Variables
+        run: |
+          echo "El ID de Test Execution es: ${{ github.event.client_payload.test_execution_key }}"
+          echo "El Project Key es: SB"
+      # ---------------------------
+
+      - name: Install dependencies
+        run: npm i
+
+      - name: Install Cucumber Formatter (Linux)
+        run: |
+          curl -L https://github.com/cucumber/json-formatter/releases/download/v19.0.0/cucumber-json-formatter-linux-amd64 -o cucumber-json-formatter
+          chmod +x cucumber-json-formatter
+      - name: Cypress.io
+        continue-on-error: true
+        uses: cypress-io/github-action@v6.5.0
+        with:
+          command: npm run cypress:execution-tags
+          browser: chrome
+          record: true
+        env:
+          CUCUMBER_JSON_FORMATTER: ./cucumber-json-formatter
+          
+      - name: Import Results to Xray
+        if: always()
+        uses: mikepenz/xray-action@v3
+        with:
+          username: ${{ secrets.XRAY_CLIENT_ID }}
+          password: ${{ secrets.XRAY_CLIENT_SECRET }}
+          xrayCloud: "true"
+          testFormat: 'cucumber'
+          testPaths: 'cypress/reports/cucumber-results.json'
+          # Forzamos a que NO cree nada nuevo si falla el mapeo
+          failOnImportError: true
+          # IMPORTANTE: Xray Cloud a veces requiere este parámetro para identificar el ambiente
+          testPlanKey: "${{ github.event.inputs.testPlanKey || secrets.TESTPLANKEY }}"
+          projectKey: "${{ github.event.inputs.projectKey || secrets.PROJECTKEY }}"
+          
+      - name: Upload Cypress Videos
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cypress-videos
+          path: cypress/videos/**/*.mp4
