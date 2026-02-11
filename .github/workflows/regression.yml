@@ -27,8 +27,8 @@ jobs:
       # --- PASO DE VALIDACIÓN ---
       - name: 🔍 Debug Xray Variables
         run: |
-          echo "El ID de Project es: ${{ github.event.inputs.projectKey }}"
-          echo "El ID de Test Plan es: ${{ github.event.inputs.testPlanKey }}"
+          echo "El ID de Project es: ${{ secrets.PROJECTKEY }}"
+          echo "El ID de Test Plan es: ${{ secrets.TESTPLANKEY }}"
           echo "El Project Key es: SB"
       # ---------------------------
 
