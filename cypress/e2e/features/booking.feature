@@ -1,6 +1,6 @@
 Feature: Testing to the bookings service
 
-  @regression
+  @SB-55 @regression
   Scenario: successful access
     Given the user has an account
     When validate user credentials
@@ -8,20 +8,20 @@ Feature: Testing to the bookings service
       | admin    | password123 |
     Then validate response code "200"
 
-  @regression
+  @SB-56 @regression
   Scenario: List all ids bookings
     Given list ids
     When show the list of ids
     Then validate response code booking "200"
 
-  @regression
+  @SB-57 @regression
   Scenario: Show reservations
     Given there is list reservation
     When show booking information id = "65033"
     Then validate response code booking "200"
 
 
-  @regression
+  @SB-58 @regression
   Scenario: Create new reservation
     Given the user has not created a reservation
     When register reservation data
