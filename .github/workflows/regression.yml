@@ -97,12 +97,17 @@ jobs:
 
           echo "📩 Respuesta de Xray: $RESPONSE"
 
-          # 5. EXTRAER KEY DE LA EJECUCIÓN (Opcional, útil para logs)
-          EXEC_KEY=$(echo $RESPONSE | grep -o '\"key\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4)
+          # 5. EXTRAER KEY DE LA EJECUCIÓN CON JQ
+          # jq extrae el valor del campo "key" de forma segura
+          EXEC_KEY=$(echo $RESPONSE | jq -r '.key // empty')
+
           if [ -n "$EXEC_KEY" ]; then
-            echo "✅ Resultados anexados exitosamente. Nueva Test Execution: $EXEC_KEY"
+            echo "✅ Resultados anexados exitosamente."
+            echo "🎫 Nueva Test Execution en Jira: $EXEC_KEY"
+            echo "🔗 Link: https://tu-dominio.atlassian.net/browse/$EXEC_KEY"
           else
-            echo "⚠️ Los resultados se enviaron, pero no se pudo confirmar la creación del ticket."
+            echo "⚠️ Los resultados se enviaron, pero la respuesta no contiene una Key válida."
+            echo "Respuesta completa: $RESPONSE"
           fi
           
       - name: Upload Cypress Videos
