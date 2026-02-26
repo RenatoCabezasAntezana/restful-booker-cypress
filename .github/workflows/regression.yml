@@ -55,23 +55,56 @@ jobs:
         env:
           CUCUMBER_JSON_FORMATTER: ./cucumber-json-formatter
                 
-      - name: Import Results to Xray (Manual API)
+      - name: 🚀 Authenticate and Import to Xray
         if: always()
         run: |
-          # 1. Obtener Token
-          TOKEN=$(curl -H "Content-Type: application/json" -X POST -d "{\"client_id\": \"${{ secrets.XRAY_CLIENT_ID }}\",\"client_secret\": \"${{ secrets.XRAY_CLIENT_SECRET }}\"}" https://xray.cloud.getxray.app/api/v2/authenticate | tr -d '"')
-          
-          # 2. Definir variables (usando tu lógica de prioridad)
-          PROJECT_KEY="${{ github.event.client_payload.projectKey || github.event.inputs.projectKey || 'SB' }}"
-          TEST_PLAN_KEY="${{ github.event.client_payload.testPlanKey || github.event.inputs.testPlanKey }}"
+          # 1. OBTENER TOKEN DE ACCESO (JWT)
+          # Enviamos las credenciales y limpiamos las comillas del token resultante
+          TOKEN=$(curl -s -H "Content-Type: application/json" \
+            -X POST \
+            -d "{\"client_id\": \"${{ secrets.XRAY_CLIENT_ID }}\",\"client_secret\": \"${{ secrets.XRAY_CLIENT_SECRET }}\"}" \
+            https://xray.cloud.getxray.app/api/v2/authenticate | tr -d '"')
 
-          # 3. Subir el archivo JSON de Cucumber a Xray
-          curl -H "Content-Type: application/json" \
-               -X POST \
-               -H "Authorization: Bearer $TOKEN" \
-               --data @cypress/reports/cucumber-results.json \
-               "https://xray.cloud.getxray.app/api/v2/import/execution/cucumber?projectKey=$PROJECT_KEY&testPlanKey=$TEST_PLAN_KEY"
-                
+          if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
+            echo "❌ Error: No se pudo obtener el token de Xray. Revisa tus Secrets."
+            exit 1
+          fi
+          echo "✅ Token de Xray obtenido correctamente."
+
+          # 2. DEFINIR VARIABLES DE CONTEXTO
+          # Prioridad: Payload Webhook > Input Manual > Secret > Default 'SB'
+          PROJECT_KEY="${{ github.event.client_payload.projectKey || github.event.inputs.projectKey || secrets.PROJECTKEY || 'SB' }}"
+          TEST_PLAN_KEY="${{ github.event.client_payload.testPlanKey || github.event.inputs.testPlanKey || secrets.TESTPLANKEY }}"
+
+          echo "Project: $PROJECT_KEY"
+          echo "Test Plan: ${TEST_PLAN_KEY:-'No especificado (se creará ejecución huérfana)'}"
+
+          # 3. CONSTRUIR URL CON QUERY PARAMS
+          # El parámetro 'testPlanKey' es el que hace el "anexo"
+          URL="https://xray.cloud.getxray.app/api/v2/import/execution/cucumber?projectKey=$PROJECT_KEY"
+          
+          if [ -n "$TEST_PLAN_KEY" ]; then
+            URL="${URL}&testPlanKey=$TEST_PLAN_KEY"
+          fi
+
+          # 4. EJECUTAR IMPORTACIÓN
+          # Usamos --data-binary para asegurar que el JSON se envíe sin alteraciones de formato
+          RESPONSE=$(curl -s -H "Content-Type: application/json" \
+            -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            --data-binary @cypress/reports/cucumber-results.json \
+            "$URL")
+
+          echo "📩 Respuesta de Xray: $RESPONSE"
+
+          # 5. EXTRAER KEY DE LA EJECUCIÓN (Opcional, útil para logs)
+          EXEC_KEY=$(echo $RESPONSE | grep -o '\"key\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4)
+          if [ -n "$EXEC_KEY" ]; then
+            echo "✅ Resultados anexados exitosamente. Nueva Test Execution: $EXEC_KEY"
+          else
+            echo "⚠️ Los resultados se enviaron, pero no se pudo confirmar la creación del ticket."
+          fi
+          
       - name: Upload Cypress Videos
         if: always()
         uses: actions/upload-artifact@v4
