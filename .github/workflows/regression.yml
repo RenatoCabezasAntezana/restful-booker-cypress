@@ -55,19 +55,22 @@ jobs:
         env:
           CUCUMBER_JSON_FORMATTER: ./cucumber-json-formatter
                 
-      - name: Import Results to Xray
+      - name: Import Results to Xray (Manual API)
         if: always()
-        uses: mikepenz/xray-action@v3
-        with:
-          username: ${{ secrets.XRAY_CLIENT_ID }}
-          password: ${{ secrets.XRAY_CLIENT_SECRET }}
-          xrayCloud: "true"
-          testFormat: 'cucumber'
-          testPaths: 'cypress/reports/cucumber-results.json'
-          failOnImportError: true
-          # PRIORIDAD DE VALORES: 1. Webhook Payload -> 2. Manual Input -> 3. Secrets -> 4. Hardcoded
-          projectKey: "${{ github.event.client_payload.projectKey || github.event.inputs.projectKey || secrets.PROJECTKEY || 'SB' }}"
-          testPlanKey: "${{ github.event.client_payload.testPlanKey || github.event.inputs.testPlanKey || secrets.TESTPLANKEY }}"
+        run: |
+          # 1. Obtener Token
+          TOKEN=$(curl -H "Content-Type: application/json" -X POST -d "{\"client_id\": \"${{ secrets.XRAY_CLIENT_ID }}\",\"client_secret\": \"${{ secrets.XRAY_CLIENT_SECRET }}\"}" https://xray.cloud.getxray.app/api/v2/authenticate | tr -d '"')
+          
+          # 2. Definir variables (usando tu lógica de prioridad)
+          PROJECT_KEY="${{ github.event.client_payload.projectKey || github.event.inputs.projectKey || 'SB' }}"
+          TEST_PLAN_KEY="${{ github.event.client_payload.testPlanKey || github.event.inputs.testPlanKey }}"
+
+          # 3. Subir el archivo JSON de Cucumber a Xray
+          curl -H "Content-Type: application/json" \
+               -X POST \
+               -H "Authorization: Bearer $TOKEN" \
+               --data @cypress/reports/cucumber-results.json \
+               "https://xray.cloud.getxray.app/api/v2/import/execution/cucumber?projectKey=$PROJECT_KEY&testPlanKey=$TEST_PLAN_KEY"
                 
       - name: Upload Cypress Videos
         if: always()
