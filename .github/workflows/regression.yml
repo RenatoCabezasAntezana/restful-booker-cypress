@@ -55,59 +55,41 @@ jobs:
         env:
           CUCUMBER_JSON_FORMATTER: ./cucumber-json-formatter
                 
-      - name: 🚀 Authenticate and Import to Xray
+      - name: 🚀 Import to Xray (Force Link to Test Plan)
         if: always()
         run: |
-          # 1. OBTENER TOKEN DE ACCESO (JWT)
-          # Enviamos las credenciales y limpiamos las comillas del token resultante
-          TOKEN=$(curl -s -H "Content-Type: application/json" \
-            -X POST \
+          # 1. Obtener Token
+          TOKEN=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
             -d "{\"client_id\": \"${{ secrets.XRAY_CLIENT_ID }}\",\"client_secret\": \"${{ secrets.XRAY_CLIENT_SECRET }}\"}" \
             https://xray.cloud.getxray.app/api/v2/authenticate | tr -d '"')
 
-          if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
-            echo "❌ Error: No se pudo obtener el token de Xray. Revisa tus Secrets."
-            exit 1
-          fi
-          echo "✅ Token de Xray obtenido correctamente."
+          # 2. Definir Keys (Asegúrate de que SB-54 sea un Test Plan válido)
+          PROJECT_KEY="SB"
+          TEST_PLAN_KEY="SB-54" 
 
-          # 2. DEFINIR VARIABLES DE CONTEXTO
-          # Prioridad: Payload Webhook > Input Manual > Secret > Default 'SB'
-          PROJECT_KEY="${{ github.event.client_payload.projectKey || github.event.inputs.projectKey || secrets.PROJECTKEY || 'SB' }}"
-          TEST_PLAN_KEY="${{ github.event.client_payload.testPlanKey || github.event.inputs.testPlanKey || secrets.TESTPLANKEY }}"
+          echo "Configurando importación para Proyecto: $PROJECT_KEY y Plan: $TEST_PLAN_KEY"
 
-          echo "Project: $PROJECT_KEY"
-          echo "Test Plan: ${TEST_PLAN_KEY:-'No especificado (se creará ejecución huérfana)'}"
-
-          # 3. CONSTRUIR URL CON QUERY PARAMS
-          # El parámetro 'testPlanKey' es el que hace el "anexo"
-          URL="https://xray.cloud.getxray.app/api/v2/import/execution/cucumber?projectKey=$PROJECT_KEY"
-          
-          if [ -n "$TEST_PLAN_KEY" ]; then
-            URL="${URL}&testPlanKey=$TEST_PLAN_KEY"
-          fi
-
-          # 4. EJECUTAR IMPORTACIÓN
-          # Usamos --data-binary para asegurar que el JSON se envíe sin alteraciones de formato
+          # 3. Importación con URL Protegida por Comillas
+          # Importante: Usamos "${URL}" para que el & no rompa el comando
           RESPONSE=$(curl -s -H "Content-Type: application/json" \
             -X POST \
             -H "Authorization: Bearer $TOKEN" \
             --data-binary @cypress/reports/cucumber-results.json \
-            "$URL")
+            "https://xray.cloud.getxray.app/api/v2/import/execution/cucumber?projectKey=${PROJECT_KEY}&testPlanKey=${TEST_PLAN_KEY}")
 
           echo "📩 Respuesta de Xray: $RESPONSE"
 
-          # 5. EXTRAER KEY DE LA EJECUCIÓN CON JQ
-          # jq extrae el valor del campo "key" de forma segura
+          # 4. Verificación con JQ
           EXEC_KEY=$(echo $RESPONSE | jq -r '.key // empty')
 
-          if [ -n "$EXEC_KEY" ]; then
-            echo "✅ Resultados anexados exitosamente."
-            echo "🎫 Nueva Test Execution en Jira: $EXEC_KEY"
-            echo "🔗 Link: https://tu-dominio.atlassian.net/browse/$EXEC_KEY"
+          if [ -n "$EXEC_KEY" ] && [ "$EXEC_KEY" != "null" ]; then
+            echo "✅ EXECUCIÓN CREADA: $EXEC_KEY"
+            echo "🔎 REVISA AQUÍ: https://renatosistemas02.atlassian.net/browse/$TEST_PLAN_KEY"
+            echo "La ejecución $EXEC_KEY debería aparecer en la pestaña 'Test Board' o 'Test Executions' del plan."
           else
-            echo "⚠️ Los resultados se enviaron, pero la respuesta no contiene una Key válida."
-            echo "Respuesta completa: $RESPONSE"
+            echo "❌ ERROR: No se recibió una Key de Xray. Revisa el formato del JSON."
+            exit 1
           fi
           
       - name: Upload Cypress Videos
